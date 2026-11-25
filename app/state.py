@@ -71,6 +71,15 @@ AUTH: dict = {
 LINKS: dict = {}
 LINKS_LOCK = asyncio.Lock()
 
+TELEGRAM_USERS: dict = {}
+TELEGRAM_LOCK = asyncio.Lock()
+TELEGRAM_CONFIG: dict = {
+    "tunnel_mode": os.environ.get("TG_TUNNEL_MODE", "bore").strip().lower() or "bore",
+    "bore_server": os.environ.get("BORE_SERVER", "bore.pub").strip() or "bore.pub",
+    "bore_secret": os.environ.get("BORE_SECRET", "").strip(),
+    "direct_host": os.environ.get("TG_DIRECT_HOST", "").strip(),
+}
+
 connections: dict = {}
 stats: dict = {
     "total_bytes": 0,
@@ -295,6 +304,15 @@ async def load_state() -> None:
                         CONFIG[key] = data["settings"][key]
                 if isinstance(data["settings"].get("panel_location"), dict):
                     CONFIG["panel_location"] = data["settings"]["panel_location"]
+            if isinstance(data.get("telegram_users"), dict):
+                async with TELEGRAM_LOCK:
+                    TELEGRAM_USERS.clear()
+                    TELEGRAM_USERS.update(data["telegram_users"])
+            if isinstance(data.get("telegram_config"), dict):
+                async with TELEGRAM_LOCK:
+                    for k in ("tunnel_mode", "bore_server", "bore_secret", "direct_host"):
+                        if k in data["telegram_config"] and data["telegram_config"][k] is not None:
+                            TELEGRAM_CONFIG[k] = str(data["telegram_config"][k])
             if "total_bytes" in data:
                 stats["total_bytes"] = int(data.get("total_bytes") or 0)
             logger.info("State loaded: %d links from %s", len(LINKS), DATA_FILE)
@@ -308,8 +326,13 @@ async def save_state() -> None:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             async with LINKS_LOCK:
                 links_snapshot = dict(LINKS)
+            async with TELEGRAM_LOCK:
+                tg_users_snapshot = dict(TELEGRAM_USERS)
+                tg_cfg_snapshot = dict(TELEGRAM_CONFIG)
             data = {
                 "links": links_snapshot,
+                "telegram_users": tg_users_snapshot,
+                "telegram_config": tg_cfg_snapshot,
                 "password_hash": AUTH["password_hash"],
                 "total_bytes": stats["total_bytes"],
                 "saved_at": datetime.now().isoformat(),

@@ -97,6 +97,26 @@
       <span>Uptime <b id="uptime-display" class="mono">00:00:00</b> · Platform <b style="color:var(--acc)">{{ platform_name }}</b></span>
     </div>
   </section>
+
+  <!-- Telegram Proxy Panel (MTProto Fake-TLS & SOCKS5 + bore.pub TCP Tunnel) -->
+  <section class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <div>
+        <h2 style="margin:0;font-size:16px;font-weight:700">Telegram Proxy Panel</h2>
+        <p class="mut" style="margin:3px 0 0;font-size:12px">MTProto Fake-TLS &amp; SOCKS5 users · Public TCP via <span id="tgTunnelLabel" class="mono">bore.pub</span> (no Railway TCP)</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="tgEngineBadge" class="pill mut" style="font-size:11px">Checking engines...</span>
+        <span id="tgTunnelBadge" class="pill mut" style="font-size:11px">0 tunnels</span>
+        <button class="btn sm" onclick="openTgSettingsModal()"><svg class="i"><use href="#edit"/></svg>Tunnel Settings</button>
+        <button class="btn primary sm" onclick="openAddTgModal()"><svg class="i"><use href="#plus"/></svg>Add Telegram User</button>
+      </div>
+    </div>
+    <div id="tgUsersList" style="display:flex;flex-direction:column;gap:10px">
+      <div class="mut" style="font-size:12px;padding:12px 0">Loading Telegram proxy users...</div>
+    </div>
+  </section>
+
 </main>
 
 <!-- Add Config Modal -->
@@ -291,6 +311,50 @@
       </div>
     </div>
     <div class="mf"><button class="btn" onclick="toggleModal('settingsModal',false)">Close</button></div>
+  </div>
+</div>
+
+
+<!-- Add Telegram User Modal -->
+<div id="addTgModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="addTgModal-t">
+  <div class="sheet" tabindex="-1" style="--w:520px">
+    <div class="mh"><div><h3 id="addTgModal-t">Add Telegram Proxy User</h3><p>Create an MTProto Fake-TLS or SOCKS5 proxy user exposed over bore.pub or direct TCP.</p></div><button class="ib sm" onclick="toggleModal('addTgModal',false)" aria-label="Close"><svg class="i"><use href="#x"/></svg></button></div>
+    <div class="mb">
+      <label class="field"><span>Label</span><input type="text" id="tg-label" class="input" placeholder="e.g. Personal Telegram"></label>
+      <label class="field"><span>Proxy Mode</span>
+        <select id="tg-mode" class="input" onchange="onTgModeChange()">
+          <option value="mtproto">MTProto v2 (Fake-TLS ee secret · Recommended)</option>
+          <option value="socks5">SOCKS5 (Built-in Async User/Pass)</option>
+        </select>
+      </label>
+      <label class="field" id="tg-domain-wrap"><span>Fake-TLS Domain</span><input type="text" id="tg-domain" class="input" value="www.cloudflare.com" placeholder="www.cloudflare.com"></label>
+      <div id="tg-socks-wrap" style="display:none;gap:10px;flex-direction:column">
+        <label class="field"><span>SOCKS5 Username (optional, auto-generated if empty)</span><input type="text" id="tg-user" class="input" placeholder="Auto-generated"></label>
+        <label class="field"><span>SOCKS5 Password (optional, auto-generated if empty)</span><input type="text" id="tg-pass" class="input" placeholder="Auto-generated"></label>
+      </div>
+      <label class="field"><span>Note (optional)</span><input type="text" id="tg-note" class="input" placeholder="Family / Phone / Desktop"></label>
+      <div id="tgAddError" class="alert hidden" role="alert"></div>
+    </div>
+    <div class="mf"><button class="btn" onclick="toggleModal('addTgModal',false)">Cancel</button><button class="btn primary" onclick="createTgUser()">Create &amp; Start Tunnel</button></div>
+  </div>
+</div>
+
+<!-- Telegram Tunnel Settings Modal -->
+<div id="tgSettingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tgSettingsModal-t">
+  <div class="sheet" tabindex="-1" style="--w:520px">
+    <div class="mh"><div><h3 id="tgSettingsModal-t">Telegram Tunnel Settings</h3><p>Expose Telegram TCP ports via bore.pub (or self-hosted bore) instead of Railway TCP.</p></div><button class="ib sm" onclick="toggleModal('tgSettingsModal',false)" aria-label="Close"><svg class="i"><use href="#x"/></svg></button></div>
+    <div class="mb">
+      <label class="field"><span>Tunnel Mode</span>
+        <select id="tg-tunnel-mode" class="input">
+          <option value="bore">bore.pub TCP Tunnel (Automatic Public Port)</option>
+          <option value="direct">Direct VPS Host &amp; Port</option>
+        </select>
+      </label>
+      <label class="field"><span>Bore Server Host</span><input type="text" id="tg-bore-server" class="input" value="bore.pub" placeholder="bore.pub or your-bore-server.com"></label>
+      <label class="field"><span>Bore Secret (optional, for private bore servers)</span><input type="password" id="tg-bore-secret" class="input" placeholder="Leave blank for public bore.pub"></label>
+      <label class="field"><span>Direct VPS Host (used only in Direct mode)</span><input type="text" id="tg-direct-host" class="input" placeholder="e.g. vps.yourdomain.com or IP"></label>
+    </div>
+    <div class="mf"><button class="btn" onclick="toggleModal('tgSettingsModal',false)">Cancel</button><button class="btn primary" onclick="saveTgConfig()">Save &amp; Restart Tunnels</button></div>
   </div>
 </div>
 

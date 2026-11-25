@@ -16,7 +16,8 @@ from app import xray_manager
 from app.config import PLATFORM_INFO, PUBLIC_PORT, STATIC_DIR
 from app.location import auto_detect_location
 from app.proxy import close_proxy_client, router as proxy_router
-from app.routes import api_auth, api_links, api_system, pages, sub
+from app.routes import api_auth, api_links, api_system, api_telegram, pages, sub
+from app.telegram_proxy import start_all_telegram_proxies, stop_all_telegram_proxies
 from app.state import CONFIG, connections, ensure_default_link, load_state, log_activity, save_state
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -75,6 +76,7 @@ async def lifespan(_app: FastAPI):
     else:
         log_activity("system", f"MX-UI & Xray Core started on {PLATFORM_INFO['name']}", "ok")
 
+    await start_all_telegram_proxies()
     stats_task = asyncio.create_task(_xray_stats_loop())
     prune_task = asyncio.create_task(_prune_connections_loop())
 
@@ -84,6 +86,7 @@ async def lifespan(_app: FastAPI):
         stats_task.cancel()
         prune_task.cancel()
         await save_state()
+        await stop_all_telegram_proxies()
         await xray_manager.stop()
         await close_proxy_client()
 
@@ -121,6 +124,7 @@ app.include_router(proxy_router)
 app.include_router(api_auth.router)
 app.include_router(api_links.router)
 app.include_router(api_system.router)
+app.include_router(api_telegram.router)
 app.include_router(sub.router)
 app.include_router(pages.router)
 

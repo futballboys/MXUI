@@ -723,3 +723,170 @@ async function changePassword() {
 loadConfigs();
 setInterval(updateStats, 5000);
 setInterval(loadConfigs, 15000);
+
+
+/* ================= Telegram Proxy Panel (MTProto & SOCKS5 + bore.pub) ================= */
+var _tgStatus = {};
+
+function onTgModeChange() {
+  var m = document.getElementById('tg-mode').value;
+  document.getElementById('tg-domain-wrap').style.display = m === 'mtproto' ? '' : 'none';
+  document.getElementById('tg-socks-wrap').style.display = m === 'socks5' ? 'flex' : 'none';
+}
+
+function openAddTgModal() {
+  document.getElementById('tg-label').value = '';
+  document.getElementById('tg-mode').value = 'mtproto';
+  document.getElementById('tg-domain').value = 'www.cloudflare.com';
+  document.getElementById('tg-user').value = '';
+  document.getElementById('tg-pass').value = '';
+  document.getElementById('tg-note').value = '';
+  var err = document.getElementById('tgAddError');
+  if (err) { err.textContent = ''; err.classList.add('hidden'); }
+  onTgModeChange();
+  toggleModal('addTgModal', true);
+}
+
+function openTgSettingsModal() {
+  document.getElementById('tg-tunnel-mode').value = _tgStatus.tunnel_mode || 'bore';
+  document.getElementById('tg-bore-server').value = _tgStatus.bore_server || 'bore.pub';
+  document.getElementById('tg-bore-secret').value = '';
+  document.getElementById('tg-direct-host').value = _tgStatus.direct_host || '';
+  toggleModal('tgSettingsModal', true);
+}
+
+async function loadTelegramUsers() {
+  var box = document.getElementById('tgUsersList');
+  if (!box) return;
+  try {
+    var r = await fetch('/api/telegram/users');
+    if (!r.ok) return;
+    var data = await r.json();
+    _tgStatus = data.status || {};
+    var users = data.users || [];
+
+    var lbl = document.getElementById('tgTunnelLabel');
+    if (lbl) lbl.textContent = _tgStatus.tunnel_mode === 'direct' ? (_tgStatus.direct_host || 'Direct VPS') : (_tgStatus.bore_server || 'bore.pub');
+
+    var eng = document.getElementById('tgEngineBadge');
+    if (eng) {
+      eng.textContent = (_tgStatus.mtg_available ? 'MTProto Ready' : 'SOCKS5 Ready') + (_tgStatus.bore_available ? ' · bore OK' : '');
+    }
+    var tun = document.getElementById('tgTunnelBadge');
+    if (tun) {
+      tun.textContent = (_tgStatus.tunnels_online || 0) + ' / ' + (_tgStatus.total_users || 0) + ' online';
+    }
+
+    if (!users.length) {
+      box.innerHTML = '<div class="mut" style="font-size:12px;padding:10px 0">No Telegram proxy users yet. Click <b>Add Telegram User</b> to create an MTProto Fake-TLS or SOCKS5 link over bore.pub.</div>';
+      return;
+    }
+
+    box.innerHTML = users.map(function(u) {
+      var modeTag = u.mode === 'mtproto' ? 'MTPROTO FAKE-TLS' : 'SOCKS5';
+      var stColor = (u.running && u.tunnel_running) ? '#10b981' : (u.running ? '#f59e0b' : '#94a3b8');
+      var stText = (u.running && u.tunnel_running) ? 'Online' : (u.running ? 'Connecting bore...' : (u.active ? 'Stopped' : 'Disabled'));
+      var detail = u.mode === 'mtproto' ? ('SNI: ' + (u.fake_tls_domain || 'www.cloudflare.com')) : ('User: ' + (u.username || ''));
+      var errHtml = u.error ? ('<div style="font-size:11px;color:#ef4444;margin-top:4px">' + String(u.error).replace(/</g, '&lt;') + '</div>') : '';
+      return '<div class="box" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px">'
+        + '<div style="min-width:220px;flex:1">'
+        +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        +     '<span class="pill" style="font-size:10px">' + modeTag + '</span>'
+        +     '<strong style="font-size:13.5px">' + String(u.label).replace(/</g, '&lt;') + '</strong>'
+        +     '<span style="font-size:11px;color:' + stColor + '">● ' + stText + '</span>'
+        +   '</div>'
+        +   '<div class="mono mut" style="font-size:11.5px;margin-top:5px">' + String(u.endpoint || '').replace(/</g, '&lt;') + ' &nbsp;·&nbsp; ' + detail.replace(/</g, '&lt;') + '</div>'
+        +   errHtml
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+        +   '<button class="btn sm" onclick="copyText(' + JSON.stringify(u.tg_link || '') + ')">Copy tg://</button>'
+        +   '<button class="btn sm" onclick="copyText(' + JSON.stringify(u.tme_link || '') + ')">Copy t.me</button>'
+        +   '<button class="btn sm" onclick="showTgQr(' + JSON.stringify(u.id) + ')">QR</button>'
+        +   '<button class="btn sm" onclick="toggleTgUser(' + JSON.stringify(u.id) + ',' + (!u.active) + ')">' + (u.active ? 'Pause' : 'Enable') + '</button>'
+        +   '<button class="btn sm" onclick="restartTgUser(' + JSON.stringify(u.id) + ')">Restart</button>'
+        +   '<button class="btn sm danger" onclick="deleteTgUser(' + JSON.stringify(u.id) + ')">Delete</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    console.warn('loadTelegramUsers failed', e);
+  }
+}
+
+async function createTgUser() {
+  var err = document.getElementById('tgAddError');
+  if (err) { err.textContent = ''; err.classList.add('hidden'); }
+  var payload = {
+    label: document.getElementById('tg-label').value.trim(),
+    mode: document.getElementById('tg-mode').value,
+    fake_tls_domain: document.getElementById('tg-domain').value.trim() || 'www.cloudflare.com',
+    username: document.getElementById('tg-user').value.trim(),
+    password: document.getElementById('tg-pass').value.trim(),
+    note: document.getElementById('tg-note').value.trim(),
+    active: true
+  };
+  var r = await fetch('/api/telegram/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  var data = await r.json();
+  if (!r.ok) {
+    if (err) { err.textContent = data.detail || 'Failed to create Telegram user'; err.classList.remove('hidden'); }
+    return;
+  }
+  toggleModal('addTgModal', false);
+  await loadTelegramUsers();
+}
+
+async function toggleTgUser(uid, nextActive) {
+  await fetch('/api/telegram/users/' + encodeURIComponent(uid), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active: nextActive })
+  });
+  await loadTelegramUsers();
+}
+
+async function restartTgUser(uid) {
+  await fetch('/api/telegram/users/' + encodeURIComponent(uid) + '/restart', { method: 'POST' });
+  await loadTelegramUsers();
+}
+
+async function deleteTgUser(uid) {
+  await fetch('/api/telegram/users/' + encodeURIComponent(uid), { method: 'DELETE' });
+  await loadTelegramUsers();
+}
+
+async function showTgQr(uid) {
+  var r = await fetch('/api/telegram/users/' + encodeURIComponent(uid) + '/qr');
+  if (!r.ok) return;
+  var d = await r.json();
+  document.getElementById('qrTargetLabel').textContent = d.label + ' (Telegram Proxy)';
+  document.getElementById('qrImage').src = d.tg_qr;
+  document.getElementById('qrTextPayload').textContent = d.tg_link;
+  document.getElementById('qrSubImage').src = d.tme_qr;
+  document.getElementById('qrSubPayload').textContent = d.tme_link;
+  toggleModal('qrModal', true);
+}
+
+async function saveTgConfig() {
+  var payload = {
+    tunnel_mode: document.getElementById('tg-tunnel-mode').value,
+    bore_server: document.getElementById('tg-bore-server').value.trim() || 'bore.pub',
+    bore_secret: document.getElementById('tg-bore-secret').value.trim(),
+    direct_host: document.getElementById('tg-direct-host').value.trim()
+  };
+  await fetch('/api/telegram/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  toggleModal('tgSettingsModal', false);
+  await loadTelegramUsers();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadTelegramUsers();
+  setInterval(loadTelegramUsers, 10000);
+});

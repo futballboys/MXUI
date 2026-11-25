@@ -176,6 +176,9 @@ async def update_settings(request: Request, _=Depends(require_auth)):
     body = await request.json()
     if "cdn_host" in body:
         CONFIG["cdn_host"] = str(body["cdn_host"] or "").strip()[:120]
+    if "country_code" in body and isinstance(body["country_code"], str) and body["country_code"].strip():
+        city = str(body.get("city") or "Auto").strip()[:60]
+        CONFIG["panel_location"] = build_location(body["country_code"].strip(), city=city, auto_detected=False)
 
     await save_state()
     log_activity("settings", "Updated panel location & network settings", "info")

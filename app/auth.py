@@ -1,4 +1,4 @@
-"""Authentication, password hashing, and HMAC-signed persistent sessions."""
+"""Authentication, PBKDF2 password hashing, and HMAC-signed persistent sessions."""
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import logging
 import os
+import secrets
 import time
 from typing import Optional
 
@@ -18,6 +19,7 @@ logger = logging.getLogger("MX-UI")
 
 SESSION_COOKIE = "mxui_session"
 SESSION_TTL = 60 * 60 * 24 * 365
+_PBKDF2_ITERATIONS = 200_000
 
 # In-memory revocation epoch + HMAC-signed tokens so sessions survive restarts
 _SESSION_EPOCH_FILE = DATA_DIR / "session_epoch.txt"
@@ -45,13 +47,45 @@ def _bump_epoch() -> str:
     return new_epoch
 
 
-def hash_password(pw: str) -> str:
+def _legacy_sha256(pw: str) -> str:
     return hashlib.sha256(f"{pw}{CONFIG['secret']}".encode()).hexdigest()
+
+
+def hash_password(pw: str) -> str:
+    """Hash password with PBKDF2-HMAC-SHA256 and a random per-password salt."""
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256",
+        f"{pw}{CONFIG['secret']}".encode("utf-8"),
+        salt.encode("ascii"),
+        _PBKDF2_ITERATIONS,
+    ).hex()
+    return f"pbkdf2${_PBKDF2_ITERATIONS}${salt}${dk}"
+
+
+def verify_password(pw: str, stored_hash: str) -> bool:
+    """Verify password in constant time (supports PBKDF2 and legacy SHA-256 hashes)."""
+    if not stored_hash:
+        return False
+    if stored_hash.startswith("pbkdf2$"):
+        try:
+            _, iter_str, salt, expected = stored_hash.split("$", 3)
+            iterations = int(iter_str)
+            dk = hashlib.pbkdf2_hmac(
+                "sha256",
+                f"{pw}{CONFIG['secret']}".encode("utf-8"),
+                salt.encode("ascii"),
+                iterations,
+            ).hex()
+            return hmac.compare_digest(dk, expected)
+        except Exception:
+            return False
+    return hmac.compare_digest(_legacy_sha256(pw), stored_hash)
 
 
 def is_default_password_active() -> bool:
     default_pw = os.environ.get("ADMIN_PASSWORD", "MUVIXO")
-    return AUTH["password_hash"] == hash_password(default_pw) and not SETUP_COMPLETE_FILE.exists()
+    return verify_password(default_pw, AUTH["password_hash"]) and not SETUP_COMPLETE_FILE.exists()
 
 
 def is_setup_complete() -> bool:
@@ -60,7 +94,7 @@ def is_setup_complete() -> bool:
             return True
         if os.environ.get("ADMIN_PASSWORD") and os.environ.get("ADMIN_PASSWORD") != "MUVIXO":
             return True
-        return AUTH["password_hash"] != hash_password("MUVIXO")
+        return not verify_password("MUVIXO", AUTH["password_hash"])
     except Exception:
         return False
 

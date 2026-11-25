@@ -1,6 +1,9 @@
 """Authentication and path configuration API routes."""
 from __future__ import annotations
 
+from collections import defaultdict
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -15,11 +18,31 @@ from app.auth import (
     is_valid_session,
     mark_setup_complete,
     require_auth,
+    verify_password,
 )
-from app.config import get_scheme
 from app.state import AUTH, CONFIG, log_activity, save_state
 
 router = APIRouter(prefix="/api", tags=["auth"])
+
+# Simple per-IP brute-force protection for /api/login
+_LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
+_LOGIN_WINDOW_SEC = 60.0
+_LOGIN_MAX_FAILS = 8
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if fwd:
+        return fwd
+    return request.client.host if request.client else "unknown"
+
+
+def _check_login_rate_limit(ip: str) -> None:
+    now = time.monotonic()
+    recent = [ts for ts in _LOGIN_FAILURES[ip] if now - ts < _LOGIN_WINDOW_SEC]
+    _LOGIN_FAILURES[ip] = recent
+    if len(recent) >= _LOGIN_MAX_FAILS:
+        raise HTTPException(status_code=429, detail="Too many failed login attempts. Try again in 1 minute.")
 
 
 @router.post("/setup")
@@ -42,10 +65,22 @@ async def setup_admin(request: Request):
 async def api_login(request: Request):
     if not is_setup_complete():
         raise HTTPException(status_code=403, detail="Setup required. Please visit /setup")
+    ip = _client_ip(request)
+    _check_login_rate_limit(ip)
+
     body = await request.json()
-    if hash_password(str(body.get("password", ""))) != AUTH["password_hash"]:
-        log_activity("auth", "Failed login attempt", "warn")
+    password = str(body.get("password", ""))
+    if not verify_password(password, AUTH["password_hash"]):
+        _LOGIN_FAILURES[ip].append(time.monotonic())
+        log_activity("auth", f"Failed login attempt from {ip}", "warn")
         raise HTTPException(status_code=401, detail="Wrong password")
+
+    _LOGIN_FAILURES.pop(ip, None)
+    # Upgrade legacy SHA-256 hash transparently to PBKDF2 on successful login
+    if not AUTH["password_hash"].startswith("pbkdf2$"):
+        AUTH["password_hash"] = hash_password(password)
+        await save_state()
+
     token = await create_session()
     resp = JSONResponse({"ok": True, "dashboard_path": CONFIG.get("dashboard_path", "/dashboard")})
     resp.set_cookie(
@@ -79,7 +114,7 @@ async def is_default_password():
 
 
 @router.get("/current-paths")
-async def get_current_paths():
+async def get_current_paths(_=Depends(require_auth)):
     return {
         "dashboard": CONFIG.get("dashboard_path", "/dashboard"),
         "login": CONFIG.get("login_path", "/login"),
@@ -116,7 +151,7 @@ async def update_path(request: Request, _=Depends(require_auth)):
 @router.post("/change-password")
 async def api_change_password(request: Request, _=Depends(require_auth)):
     body = await request.json()
-    if hash_password(str(body.get("current_password", ""))) != AUTH["password_hash"]:
+    if not verify_password(str(body.get("current_password", "")), AUTH["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     new = str(body.get("new_password", ""))
     if len(new) < 4:

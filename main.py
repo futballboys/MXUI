@@ -68,7 +68,7 @@ async def lifespan(_app: FastAPI):
                 break
         except Exception as exc:
             logger.warning("[xray] attempt %d failed: %s", attempt + 1, exc)
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
     if not xray_ok:
         log_activity("system", f"Panel started on {PLATFORM_INFO['name']} (Xray binary not active)", "warn")
@@ -88,50 +88,32 @@ async def lifespan(_app: FastAPI):
         await close_proxy_client()
 
 
-app = FastAPI(title="MX-UI", version="1.0.0", docs_url=None, redoc_url=None)
-
-_bg_tasks = []
-
-@app.on_event("startup")
-async def _on_startup():
-    await load_state()
-    await ensure_default_link()
-    CONFIG["panel_location"] = await auto_detect_location()
-
-    xray_ok = False
-    for attempt in range(2):
-        try:
-            xray_ok = await xray_manager.start()
-            if xray_ok:
-                await xray_manager.diagnose_and_log()
-                break
-        except Exception as exc:
-            logger.warning("[xray] attempt %d failed: %s", attempt + 1, exc)
-        await asyncio.sleep(0.5)
-
-    if not xray_ok:
-        log_activity("system", f"Panel started on {PLATFORM_INFO['name']} (Xray binary not active)", "warn")
-    else:
-        log_activity("system", f"MX-UI & Xray Core started on {PLATFORM_INFO['name']}", "ok")
-
-    _bg_tasks.append(asyncio.create_task(_xray_stats_loop()))
-    _bg_tasks.append(asyncio.create_task(_prune_connections_loop()))
-
-@app.on_event("shutdown")
-async def _on_shutdown():
-    for t in _bg_tasks:
-        t.cancel()
-    await save_state()
-    await xray_manager.stop()
-    await close_proxy_client()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="MX-UI",
+    version="1.0.0",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan,
 )
+
+# Restrict CORS safely: credentials only allowed when explicit origins are configured
+_cors_env = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+if _cors_env:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_env,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -145,4 +127,14 @@ app.include_router(pages.router)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or os.environ.get("SERVER_PORT") or PUBLIC_PORT)
-    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info", workers=1, proxy_headers=True, forwarded_allow_ips="*", ws_ping_interval=25, ws_ping_timeout=20)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        workers=1,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+        ws_ping_interval=25,
+        ws_ping_timeout=20,
+    )

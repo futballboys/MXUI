@@ -247,10 +247,10 @@ function renderLinks() {
   });
   var c = $('config-list');
   if (!c) return;
-  if (items.length) {
-    c.innerHTML = items.map(row).join('');
-  } else {
-    c.innerHTML = '<div class="empty"><b>' + (links.length ? 'No matches' : 'No configs yet') + '</b>' + (links.length ? 'Try a different keyword.' : 'Select "Add config" to create your first one.') + '</div>';
+  var nextHtml = items.length ? items.map(row).join('') : ('<div class="empty"><b>' + (links.length ? 'No matches' : 'No configs yet') + '</b>' + (links.length ? 'Try a different keyword.' : 'Select "Add config" to create your first one.') + '</div>');
+  if (c._lastRenderedHtml !== nextHtml) {
+    c._lastRenderedHtml = nextHtml;
+    c.innerHTML = nextHtml;
   }
 }
 
@@ -724,9 +724,18 @@ loadConfigs();
 setInterval(updateStats, 5000);
 setInterval(loadConfigs, 15000);
 
-
 /* ================= Telegram Proxy Panel (MTProto & SOCKS5 + bore.pub) ================= */
 var _tgStatus = {};
+var _tgUsersById = {};
+
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function onTgModeChange() {
   var m = document.getElementById('tg-mode').value;
@@ -759,57 +768,150 @@ async function loadTelegramUsers() {
   var box = document.getElementById('tgUsersList');
   if (!box) return;
   try {
-    var r = await fetch('/api/telegram/users');
+    var r = await fetch('/api/telegram/users', { credentials: 'same-origin' });
     if (!r.ok) return;
     var data = await r.json();
     _tgStatus = data.status || {};
     var users = data.users || [];
+    _tgUsersById = {};
+    users.forEach(function(u) { _tgUsersById[u.id] = u; });
 
     var lbl = document.getElementById('tgTunnelLabel');
-    if (lbl) lbl.textContent = _tgStatus.tunnel_mode === 'direct' ? (_tgStatus.direct_host || 'Direct VPS') : (_tgStatus.bore_server || 'bore.pub');
+    if (lbl) {
+      lbl.textContent = _tgStatus.tunnel_mode === 'direct'
+        ? (_tgStatus.direct_host || 'Direct VPS')
+        : (_tgStatus.bore_server || 'bore.pub');
+    }
 
     var eng = document.getElementById('tgEngineBadge');
     if (eng) {
-      eng.textContent = (_tgStatus.mtg_available ? 'MTProto Ready' : 'SOCKS5 Ready') + (_tgStatus.bore_available ? ' · bore OK' : '');
+      eng.textContent = (_tgStatus.mtg_available ? 'MTProto + SOCKS5' : 'SOCKS5 Ready')
+        + (_tgStatus.bore_available ? ' · bore OK' : '');
     }
     var tun = document.getElementById('tgTunnelBadge');
     if (tun) {
       tun.textContent = (_tgStatus.tunnels_online || 0) + ' / ' + (_tgStatus.total_users || 0) + ' online';
     }
 
-    if (!users.length) {
-      box.innerHTML = '<div class="mut" style="font-size:12px;padding:10px 0">No Telegram proxy users yet. Click <b>Add Telegram User</b> to create an MTProto Fake-TLS or SOCKS5 link over bore.pub.</div>';
-      return;
-    }
-
-    box.innerHTML = users.map(function(u) {
+    var nextTgHtml = !users.length
+      ? '<div class="mut" style="font-size:12.5px;padding:10px 0">No Telegram proxy users yet. Click <b>Add Telegram User</b> to create an MTProto Fake-TLS or SOCKS5 proxy over bore.pub.</div>'
+      : users.map(function(u) {
       var modeTag = u.mode === 'mtproto' ? 'MTPROTO FAKE-TLS' : 'SOCKS5';
-      var stColor = (u.running && u.tunnel_running) ? '#10b981' : (u.running ? '#f59e0b' : '#94a3b8');
-      var stText = (u.running && u.tunnel_running) ? 'Online' : (u.running ? 'Connecting bore...' : (u.active ? 'Stopped' : 'Disabled'));
-      var detail = u.mode === 'mtproto' ? ('SNI: ' + (u.fake_tls_domain || 'www.cloudflare.com')) : ('User: ' + (u.username || ''));
-      var errHtml = u.error ? ('<div style="font-size:11px;color:#ef4444;margin-top:4px">' + String(u.error).replace(/</g, '&lt;') + '</div>') : '';
-      return '<div class="box" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px">'
+      var online = !!(u.running && u.tunnel_running);
+      var stColor = online ? 'var(--ok)' : (u.running ? 'var(--warn)' : 'var(--mut)');
+      var stText = online ? 'Online' : (u.running ? 'Connecting bore...' : (u.active ? 'Stopped' : 'Paused'));
+      var detail = u.mode === 'mtproto'
+        ? ('SNI: ' + _escHtml(u.fake_tls_domain || 'www.cloudflare.com'))
+        : ('User: ' + _escHtml(u.username || '') + ' · Pass: ' + _escHtml(u.password || ''));
+      var errHtml = u.error ? ('<div style="font-size:11px;color:var(--bad);margin-top:4px">' + _escHtml(u.error) + '</div>') : '';
+      var uidAttr = _escHtml(u.id);
+      return '<div class="tg-user-row">'
         + '<div style="min-width:220px;flex:1">'
         +   '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-        +     '<span class="pill" style="font-size:10px">' + modeTag + '</span>'
-        +     '<strong style="font-size:13.5px">' + String(u.label).replace(/</g, '&lt;') + '</strong>'
-        +     '<span style="font-size:11px;color:' + stColor + '">● ' + stText + '</span>'
+        +     '<span class="pill" style="font-size:10px;font-weight:700">' + modeTag + '</span>'
+        +     '<strong style="font-size:13.5px">' + _escHtml(u.label) + '</strong>'
+        +     '<span style="font-size:11.5px;font-weight:600;color:' + stColor + '"><span class="tg-dot' + (online ? ' live' : '') + '" style="background:' + stColor + '"></span>' + stText + '</span>'
         +   '</div>'
-        +   '<div class="mono mut" style="font-size:11.5px;margin-top:5px">' + String(u.endpoint || '').replace(/</g, '&lt;') + ' &nbsp;·&nbsp; ' + detail.replace(/</g, '&lt;') + '</div>'
+        +   '<div class="mono mut" style="font-size:11.5px;margin-top:5px">' + _escHtml(u.endpoint || '') + ' &nbsp;·&nbsp; ' + detail + '</div>'
         +   errHtml
         + '</div>'
-        + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-        +   '<button class="btn sm" onclick="copyText(' + JSON.stringify(u.tg_link || '') + ')">Copy tg://</button>'
-        +   '<button class="btn sm" onclick="copyText(' + JSON.stringify(u.tme_link || '') + ')">Copy t.me</button>'
-        +   '<button class="btn sm" onclick="showTgQr(' + JSON.stringify(u.id) + ')">QR</button>'
-        +   '<button class="btn sm" onclick="toggleTgUser(' + JSON.stringify(u.id) + ',' + (!u.active) + ')">' + (u.active ? 'Pause' : 'Enable') + '</button>'
-        +   '<button class="btn sm" onclick="restartTgUser(' + JSON.stringify(u.id) + ')">Restart</button>'
-        +   '<button class="btn sm danger" onclick="deleteTgUser(' + JSON.stringify(u.id) + ')">Delete</button>'
+        + '<div class="tg-actions">'
+        +   '<button type="button" class="btn sm primary" data-tg-action="open-tg" data-tg-id="' + uidAttr + '">Open</button>'
+        +   '<button type="button" class="btn sm" data-tg-action="copy-tg" data-tg-id="' + uidAttr + '">Copy tg://</button>'
+        +   '<button type="button" class="btn sm" data-tg-action="copy-tme" data-tg-id="' + uidAttr + '">Copy t.me</button>'
+        +   '<button type="button" class="btn sm" data-tg-action="qr" data-tg-id="' + uidAttr + '">QR</button>'
+        +   '<button type="button" class="btn sm" data-tg-action="toggle" data-tg-id="' + uidAttr + '">' + (u.active ? 'Pause' : 'Enable') + '</button>'
+        +   '<button type="button" class="btn sm" data-tg-action="restart" data-tg-id="' + uidAttr + '">Restart</button>'
+        +   '<button type="button" class="btn sm danger" data-tg-action="delete" data-tg-id="' + uidAttr + '">Delete</button>'
         + '</div>'
         + '</div>';
     }).join('');
+    if (box._lastRenderedHtml !== nextTgHtml) {
+      box._lastRenderedHtml = nextTgHtml;
+      box.innerHTML = nextTgHtml;
+    }
   } catch (e) {
     console.warn('loadTelegramUsers failed', e);
+  }
+}
+
+async function handleTgAction(btn) {
+  var action = btn.getAttribute('data-tg-action');
+  var uid = btn.getAttribute('data-tg-id');
+  var u = _tgUsersById[uid];
+  if (!action || !uid || !u) return;
+
+  if (action === 'copy-tg') {
+    if (!u.tg_link) { toast('Link not ready yet', 'err'); return; }
+    copyText(u.tg_link);
+    return;
+  }
+  if (action === 'copy-tme') {
+    if (!u.tme_link) { toast('Link not ready yet', 'err'); return; }
+    copyText(u.tme_link);
+    return;
+  }
+  if (action === 'open-tg') {
+    if (!u.tg_link) { toast('Link not ready yet', 'err'); return; }
+    window.location.href = u.tg_link;
+    return;
+  }
+  if (action === 'qr') {
+    await showTgQr(uid);
+    return;
+  }
+  if (action === 'toggle') {
+    btn.disabled = true;
+    try {
+      var r = await fetch('/api/telegram/users/' + encodeURIComponent(uid), {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !u.active })
+      });
+      if (r.ok) toast(u.active ? 'Telegram user paused' : 'Telegram user enabled', 'ok');
+      else toast('Failed to update user', 'err');
+      await loadTelegramUsers();
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+  if (action === 'restart') {
+    btn.disabled = true;
+    var oldTxt = btn.textContent;
+    btn.textContent = '...';
+    try {
+      var r2 = await fetch('/api/telegram/users/' + encodeURIComponent(uid) + '/restart', {
+        method: 'POST',
+        credentials: 'same-origin'
+      });
+      if (r2.ok) toast('Proxy & bore.pub tunnel restarted', 'ok');
+      else toast('Restart failed', 'err');
+      await loadTelegramUsers();
+    } finally {
+      btn.textContent = oldTxt;
+      btn.disabled = false;
+    }
+    return;
+  }
+  if (action === 'delete') {
+    var ok = typeof showConfirm === 'function'
+      ? await showConfirm('Delete Telegram user', 'Remove "' + u.label + '" and stop its tunnel?')
+      : confirm('Remove "' + u.label + '" and stop its tunnel?');
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      var r3 = await fetch('/api/telegram/users/' + encodeURIComponent(uid), {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+      if (r3.ok) toast('Telegram user deleted', 'ok');
+      else toast('Delete failed', 'err');
+      await loadTelegramUsers();
+    } finally {
+      btn.disabled = false;
+    }
   }
 }
 
@@ -825,42 +927,29 @@ async function createTgUser() {
     note: document.getElementById('tg-note').value.trim(),
     active: true
   };
-  var r = await fetch('/api/telegram/users', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  var data = await r.json();
-  if (!r.ok) {
-    if (err) { err.textContent = data.detail || 'Failed to create Telegram user'; err.classList.remove('hidden'); }
-    return;
+  try {
+    var r = await fetch('/api/telegram/users', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var data = await r.json().catch(function() { return {}; });
+    if (!r.ok) {
+      if (err) { err.textContent = data.detail || 'Failed to create Telegram user'; err.classList.remove('hidden'); }
+      return;
+    }
+    toggleModal('addTgModal', false);
+    toast('Telegram user created & tunnel started', 'ok');
+    await loadTelegramUsers();
+  } catch (e) {
+    if (err) { err.textContent = 'Network error creating user'; err.classList.remove('hidden'); }
   }
-  toggleModal('addTgModal', false);
-  await loadTelegramUsers();
-}
-
-async function toggleTgUser(uid, nextActive) {
-  await fetch('/api/telegram/users/' + encodeURIComponent(uid), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active: nextActive })
-  });
-  await loadTelegramUsers();
-}
-
-async function restartTgUser(uid) {
-  await fetch('/api/telegram/users/' + encodeURIComponent(uid) + '/restart', { method: 'POST' });
-  await loadTelegramUsers();
-}
-
-async function deleteTgUser(uid) {
-  await fetch('/api/telegram/users/' + encodeURIComponent(uid), { method: 'DELETE' });
-  await loadTelegramUsers();
 }
 
 async function showTgQr(uid) {
-  var r = await fetch('/api/telegram/users/' + encodeURIComponent(uid) + '/qr');
-  if (!r.ok) return;
+  var r = await fetch('/api/telegram/users/' + encodeURIComponent(uid) + '/qr', { credentials: 'same-origin' });
+  if (!r.ok) { toast('Could not load QR code', 'err'); return; }
   var d = await r.json();
   document.getElementById('qrTargetLabel').textContent = d.label + ' (Telegram Proxy)';
   document.getElementById('qrImage').src = d.tg_qr;
@@ -877,16 +966,31 @@ async function saveTgConfig() {
     bore_secret: document.getElementById('tg-bore-secret').value.trim(),
     direct_host: document.getElementById('tg-direct-host').value.trim()
   };
-  await fetch('/api/telegram/config', {
+  var r = await fetch('/api/telegram/config', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  toggleModal('tgSettingsModal', false);
-  await loadTelegramUsers();
+  if (r.ok) {
+    toggleModal('tgSettingsModal', false);
+    toast('Tunnel settings saved & restarted', 'ok');
+    await loadTelegramUsers();
+  } else {
+    toast('Failed to save tunnel settings', 'err');
+  }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  var list = document.getElementById('tgUsersList');
+  if (list) {
+    list.addEventListener('click', function(ev) {
+      var btn = ev.target.closest('button[data-tg-action]');
+      if (btn) handleTgAction(btn);
+    });
+  }
   loadTelegramUsers();
   setInterval(loadTelegramUsers, 10000);
 });
+
+setTimeout(function() { document.body.classList.add('mx-ready'); }, 450);

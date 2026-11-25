@@ -92,31 +92,30 @@
       </div>
     </div>
     <div id="config-list" style="border-top:1px solid var(--line)"></div>
+  </section>
+
+  <!-- Telegram Proxy Panel (MTProto Fake-TLS & SOCKS5 + bore.pub TCP Tunnel) -->
+  <section class="tg-panel-card" id="tgPanelCard">
+    <div class="tg-panel-head">
+      <div>
+        <h2 style="margin:0;font-size:15.5px;font-weight:700">Telegram Proxy Panel</h2>
+        <p class="mut" style="margin:3px 0 0;font-size:12px">MTProto Fake-TLS &amp; SOCKS5 users · Public TCP via <span id="tgTunnelLabel" class="mono">bore.pub</span></p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="tgEngineBadge" class="pill mut" style="font-size:11px">Checking engines...</span>
+        <span id="tgTunnelBadge" class="pill mut" style="font-size:11px">0 online</span>
+        <button type="button" class="btn sm" onclick="openTgSettingsModal()"><svg class="i"><use href="#edit"/></svg>Tunnel Settings</button>
+        <button type="button" class="btn primary sm" onclick="openAddTgModal()"><svg class="i"><use href="#plus"/></svg>Add Telegram User</button>
+      </div>
+    </div>
+    <div id="tgUsersList" class="tg-panel-body">
+      <div class="mut" style="font-size:12px;padding:8px 0">Loading Telegram proxy users...</div>
+    </div>
     <div class="dfoot">
       <span>MX-UI v1.0.0 · Created by Muvixo</span>
       <span>Uptime <b id="uptime-display" class="mono">00:00:00</b> · Platform <b style="color:var(--acc)">{{ platform_name }}</b></span>
     </div>
   </section>
-
-  <!-- Telegram Proxy Panel (MTProto Fake-TLS & SOCKS5 + bore.pub TCP Tunnel) -->
-  <section class="card" style="margin-top:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      <div>
-        <h2 style="margin:0;font-size:16px;font-weight:700">Telegram Proxy Panel</h2>
-        <p class="mut" style="margin:3px 0 0;font-size:12px">MTProto Fake-TLS &amp; SOCKS5 users · Public TCP via <span id="tgTunnelLabel" class="mono">bore.pub</span> (no Railway TCP)</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span id="tgEngineBadge" class="pill mut" style="font-size:11px">Checking engines...</span>
-        <span id="tgTunnelBadge" class="pill mut" style="font-size:11px">0 tunnels</span>
-        <button class="btn sm" onclick="openTgSettingsModal()"><svg class="i"><use href="#edit"/></svg>Tunnel Settings</button>
-        <button class="btn primary sm" onclick="openAddTgModal()"><svg class="i"><use href="#plus"/></svg>Add Telegram User</button>
-      </div>
-    </div>
-    <div id="tgUsersList" style="display:flex;flex-direction:column;gap:10px">
-      <div class="mut" style="font-size:12px;padding:12px 0">Loading Telegram proxy users...</div>
-    </div>
-  </section>
-
 </main>
 
 <!-- Add Config Modal -->
@@ -362,4 +361,4 @@
 <div id="confirmModal" class="modal top" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle"><div class="sheet" tabindex="-1" style="--w:380px"><div class="cen"><div class="bdg" id="confirmBadge"><svg class="i"><use href="#alert"/></svg></div><div><h3 id="confirmTitle">Confirm action</h3><p id="confirmMessage" style="margin-top:6px">Are you sure?</p></div><div class="row2"><button class="btn" onclick="_confirmNo()">Cancel</button><button class="btn danger" id="confirmOk" onclick="_confirmYes()">Confirm</button></div></div></div></div>
 <div id="customAlert" class="modal top" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle"><div class="sheet" tabindex="-1" style="--w:380px"><div class="cen"><div class="bdg info"><svg id="alertIcon" class="i"><use href="#info"/></svg></div><div><h3 id="alertTitle">Notification</h3><p id="alertMessage" style="margin-top:6px"></p></div><button class="btn primary block" onclick="toggleModal('customAlert',false)">OK</button></div></div></div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/dashboard.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/dashboard.js?v=2.2"></script>{% endblock %}

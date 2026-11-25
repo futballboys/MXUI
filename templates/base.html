@@ -7,21 +7,21 @@
   <link rel="icon" type="image/png" href="/static/img/mxui-icon.png">
   <link rel="preload" href="/static/fonts/Inter-Regular.otf" as="font" type="font/otf" crossorigin>
   <link rel="preload" href="/static/fonts/Inter-SemiBold.otf" as="font" type="font/otf" crossorigin>
-  <link rel="preload" href="/static/fonts/Inter-Bold.otf" as="font" type="font/otf" crossorigin>
-  <link rel="preload" href="/static/fonts/DejaVuSansMono.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="/static/fonts/InterDisplay-Bold.otf" as="font" type="font/otf" crossorigin>
+  <link rel="preload" href="/static/fonts/LiberationMono-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <script>
     try {
       var t = localStorage.getItem('mx-theme');
     } catch (e) {}
     document.documentElement.dataset.theme = t || 'dark';
   </script>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/app.css?v=2.2">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
   {% block content %}{% endblock %}
   <div id="toast" class="toast" role="status"></div>
-  <script src="/static/js/utils.js"></script>
+  <script src="/static/js/utils.js?v=2.2"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

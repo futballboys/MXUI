@@ -613,3 +613,28 @@ body.mx-ready .tg-user-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* v3.0 Tailwind Obsidian Polish */
+:root[data-theme=dark] {
+  --bg: #07080c;
+  --surface: #0e1017;
+  --sunk: #131620;
+  --line: #1f2433;
+  --mut: #8e98ad;
+}
+:root[data-theme=dark] .topbar {
+  background: rgba(14, 16, 23, 0.84);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.stat, .panel, .tg-panel-card {
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.stat:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+.tg-panel-head {
+  background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent);
+}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Initial Setup · MX-UI{% endblock %}
+{% block content %}
+<div class="auth">
+  <aside class="side">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="brand-icon"><img src="/static/img/mxui-icon.png" alt="MX-UI"></span>
+      <div><b style="font-size:17px">MX-UI</b><small style="display:block;opacity:.6">v1.0.0</small></div>
+    </div>
+    <div>
+      <h2>Multi-protocol nodes, unified.</h2>
+      <p>Set your admin password to initialize the control plane.</p>
+    </div>
+    <small>Created by Muvixo</small>
+    <div class="rings"></div>
+  </aside>
+  <main class="auth-main">
+    <form id="setupForm" class="form">
+      <div>
+        <h1>Set admin password</h1>
+        <p class="mut" style="margin-top:6px">First run. Choose a password to secure your dashboard.</p>
+      </div>
+      <label class="field">
+        <span>New password</span>
+        <input type="password" id="setup-pw" class="input" required minlength="4" autofocus autocomplete="new-password" placeholder="At least 4 characters">
+      </label>
+      <label class="field">
+        <span>Confirm password</span>
+        <input type="password" id="setup-pw-confirm" class="input" required minlength="4" autocomplete="new-password" placeholder="Repeat password">
+      </label>
+      <button type="submit" id="setupButton" class="btn primary block">Save and continue</button>
+      <div id="setupErrorMsg" class="alert hidden" role="alert"></div>
+      <div id="setupSuccessMsg" class="ok-msg hidden" role="status"></div>
+      <p class="foot">MX-UI v1.0.0 · Created by Muvixo</p>
+    </form>
+  </main>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+var $ = function (id) { return document.getElementById(id); };
+$('setupForm').onsubmit = async function (e) {
+  e.preventDefault();
+  var btn = $('setupButton'), err = $('setupErrorMsg'), ok = $('setupSuccessMsg');
+  err.classList.add('hidden');
+  ok.classList.add('hidden');
+  var pw = $('setup-pw').value, c = $('setup-pw-confirm').value;
+  var fail = function (m) { err.textContent = m; err.classList.remove('hidden'); };
+  if (pw.length < 4) return fail('Password must be at least 4 characters.');
+  if (pw !== c) return fail('Passwords do not match.');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    var res = await fetch('/api/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    var d = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(d.detail || 'Setup failed.');
+    ok.textContent = 'Setup complete. Redirecting...';
+    ok.classList.remove('hidden');
+    setTimeout(function () { location.href = '{{ login_path }}'; }, 900);
+  } catch (x) {
+    fail(x.message);
+    btn.disabled = false;
+    btn.textContent = 'Save and continue';
+  }
+};
+</script>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Login · MX-UI{% endblock %}
+{% block content %}
+<div class="auth">
+  <aside class="side">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="brand-icon"><img src="/static/img/mxui-icon.png" alt="MX-UI"></span>
+      <div><b style="font-size:17px">MX-UI</b><small style="display:block;opacity:.6">v1.0.0</small></div>
+    </div>
+    <div>
+      <h2>Multi-protocol nodes, unified.</h2>
+      <p>Manage VLESS &amp; Trojan over WebSocket and XHTTP across Railway, Render, Lucity, Wispbyte, and VPS.</p>
+    </div>
+    <small>Created by Muvixo</small>
+    <div class="rings"></div>
+  </aside>
+  <main class="auth-main">
+    <form id="loginForm" class="form">
+      <div>
+        <h1>Sign in</h1>
+        <p class="mut" style="margin-top:6px">Enter the admin password to open the control plane.</p>
+      </div>
+      <div class="hint" id="hint">
+        <span>Default password</span>
+        <button type="button" id="default-password-display" onclick="fillPw()">MUVIXO</button>
+      </div>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="pw" class="input" required autofocus autocomplete="current-password" placeholder="Enter password">
+      </label>
+      <button type="submit" id="loginButton" class="btn primary block">Sign in</button>
+      <div id="errorMsg" class="alert hidden" role="alert"></div>
+      <p class="foot">MX-UI v1.0.0 · Created by Muvixo</p>
+    </form>
+  </main>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+var $ = function (id) { return document.getElementById(id); };
+function fillPw() { var p = $('pw'); p.value = 'MUVIXO'; p.focus(); }
+async function checkDefaultPassword() {
+  try {
+    var r = await fetch('/api/is-default-password');
+    var d = await r.json();
+    if (!d.is_default) $('hint').innerHTML = '<span>Use your custom admin password.</span>';
+  } catch (e) {}
+}
+checkDefaultPassword();
+$('loginForm').onsubmit = async function (e) {
+  e.preventDefault();
+  var btn = $('loginButton'), err = $('errorMsg'), pw = $('pw');
+  err.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+  try {
+    var res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw.value })
+    });
+    if (!res.ok) {
+      var m = 'Wrong password. Check it and try again.';
+      try { var d = await res.json(); if (d && d.detail) m = d.detail; } catch (x) {}
+      throw new Error(m);
+    }
+    var ok = await res.json();
+    location.href = ok.dashboard_path || '{{ dashboard_path }}';
+  } catch (x) {
+    err.textContent = x.message;
+    err.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+    pw.classList.remove('shake');
+    void pw.offsetWidth;
+    pw.classList.add('shake');
+    pw.value = '';
+    pw.focus();
+  }
+};
+</script>
+{% endblock %}
